@@ -35,7 +35,7 @@
 (defvar-local gptel-openai-assistant-thread-id nil)
 
 ;; TODO: Get this from api?
-(defvar-local gptel-openai-assistant-assistant-id (gethash 'openai-assistant-id configurations))
+(defvar gptel-openai-assistant-assistant-id nil)
 
 ;; Helper functions **********************************************************************
 (defvar url-http-end-of-headers)
@@ -367,23 +367,27 @@ CALLBACK is invoked without any args after successfully creating a thread."
         (_ (error "Unknown await state %s" await-manual-state))))))
 
 ;;;###autoload
-(defun gptel-make-openai-assistant ()
+(cl-defun gptel-make-openai-assistant
+    (name &key
+          (models gptel--openai-models)
+          (stream t)
+          key)
   "Create a openai-assistant backend."
   (gptel-openai--make-assistant
-   :name "gptel-openai-assistant"
+   :name name
    :host "api.openai.com"
    :key 'gptel-api-key
-   :models (gptel--process-models gptel--openai-models)
-   :header (lambda () (when-let (key (gptel--get-api-key))
-                        `(("Authorization" . ,(concat "Bearer " key))
-                          ("OpenAI-Beta" . "assistants=v2"))))
+   :models (gptel--process-models models)
+   :header (lambda ()
+             `(("Authorization" . ,(concat "Bearer " key))
+               ("OpenAI-Beta" . "assistants=v2")))
    :protocol "https"
    :endpoint "/v1/threads/thread_id/runs"
    :url (lambda ()
           (if gptel-openai-assistant-thread-id
               (format "https://api.openai.com/v1/threads/%s/runs" gptel-openai-assistant-thread-id)
             (user-error "No thread in current buffer to add messages!")))
-   :stream t))
+   :stream stream))
 
 ;;;###autoload
 (defun gptel-openai-assistant-create-new-thread ()
@@ -392,10 +396,6 @@ CALLBACK is invoked without any args after successfully creating a thread."
   (gptel-openai-assistant-start-thread `(:buffer ,(buffer-name))))
 
 ;; Modify gptel vars *********************************************************************
-
-(setf (alist-get "openai-assistant" gptel--known-backends
-                 nil nil #'equal)
-      (gptel-make-openai-assistant))
 
 (defun gptel-openai-assistant--backend-is-oaia-p (info)
   "Check if backend is openai-assistant."
