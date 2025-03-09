@@ -462,6 +462,31 @@ CALLBACK is invoked without any args after successfully creating a thread."
            (run-at-time delay nil (lambda () (gptel--fsm-transition fsm)))))))
 
 ;; ***************************************************************************************
+;; gptel-transient modifications *********************************************************
+;; ***************************************************************************************
+
+(cl-defmethod transient-infix-set :around ((obj gptel-provider-variable) value)
+  (pcase-let ((`(,backend-value ,model-value) value))
+    (if (gptel-openai-assistant-p backend-value)
+        (progn
+          (message "Updating openai assistant with model %s" model-value)
+          (let ((info `(:buffer ,(current-buffer)))
+                (reasoning-model (gptel--model-capable-p 'reasoning model-value)))
+            (gptel-openai-assistant--url-retrive
+             "POST"
+             (gptel--json-encode (list :model (gptel--model-name model-value)
+                                       :temperature (if reasoning-model :null gptel-temperature)
+                                       ;; TODO: respsect value or :request-params
+                                       :reasoning_effort (if reasoning-model "medium" :null)))
+             (format "https://api.openai.com/v1/assistants/%s" gptel-openai-assistant-assistant-id)
+             info
+             (lambda (response)
+               (if (plist-get info :error)
+                   (message "[ERROR] Failed to update model - %s" (map-nested-elt info '(:error :message)))
+                 (cl-call-next-method obj value))))))
+      (cl-call-next-method obj value))))
+
+;; ***************************************************************************************
 ;; gptel FSM related functions ***********************************************************
 ;; ***************************************************************************************
 

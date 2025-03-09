@@ -18,4 +18,4 @@ See https://github.com/karthink/gptel/discussions/539 for more information on ho
   (setf gptel-openai-assistant-assistant-id "<assistant id>"))
 ```
 
-Right now the creation of the assistant and any related resources (i.e., vector stores, tools, etc.) needs to be done else where (like on the dashboard). Note that setting the model on gptel won't make a difference for the the assistant, it will use whaever model configured on the assistant.
+Right now the creation of the assistant and any related resources (i.e., vector stores, tools, etc.) needs to be done else where (like on the dashboard or playground). Changing the model in `gptel-menu` would update the model used by the assistant.
