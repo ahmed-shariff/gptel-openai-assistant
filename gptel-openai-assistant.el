@@ -37,7 +37,9 @@
 ;; TODO: Get this from api?
 (defvar gptel-openai-assistant-assistant-id nil)
 
+;; ***************************************************************************************
 ;; Helper functions **********************************************************************
+;; ***************************************************************************************
 (defvar url-http-end-of-headers)
 (defun gptel-openai-assistant--url-retrive (method data url info callback)
   "Get data from URL with DATA using METHOD (POST/GET).
@@ -112,8 +114,9 @@ CALLBACK is called with the response from calling url-retrive."
     (list nil (concat "(" http-msg ") Could not parse HTTP response.")
           "Could not parse HTTP response.")))
 
-
+;; ***************************************************************************************
 ;; Core function to work with gptel ******************************************************
+;; ***************************************************************************************
 (cl-defstruct (gptel-openai-assistant
                (:constructor gptel-openai--make-assistant)
                (:copier nil)
@@ -395,8 +398,9 @@ CALLBACK is invoked without any args after successfully creating a thread."
   (interactive)
   (gptel-openai-assistant-start-thread `(:buffer ,(buffer-name))))
 
-;; Modify gptel vars *********************************************************************
-
+;; ***************************************************************************************
+;; gptel FSM related functions and related setup *****************************************
+;; ***************************************************************************************
 (defun gptel-openai-assistant--backend-is-oaia-p (info)
   "Check if backend is openai-assistant."
   (gptel-openai-assistant-p (plist-get info :backend)))
@@ -457,6 +461,9 @@ CALLBACK is invoked without any args after successfully creating a thread."
            (plist-put info :openai-assistant-delay nil)
            (run-at-time delay nil (lambda () (gptel--fsm-transition fsm)))))))
 
+;; ***************************************************************************************
+;; gptel FSM related functions ***********************************************************
+;; ***************************************************************************************
 
 ;; INIT should transition to AWAIT
 (unless (map-nested-elt gptel-request--transitions '(INIT gptel-openai-assistant--init-to-await))
