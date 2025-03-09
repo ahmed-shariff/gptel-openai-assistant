@@ -372,7 +372,6 @@ CALLBACK is invoked without any args after successfully creating a thread."
 ;;;###autoload
 (cl-defun gptel-make-openai-assistant
     (name &key
-          (models gptel--openai-models)
           (stream t)
           key)
   "Create a openai-assistant backend."
@@ -380,7 +379,12 @@ CALLBACK is invoked without any args after successfully creating a thread."
    :name name
    :host "api.openai.com"
    :key 'gptel-api-key
-   :models (gptel--process-models models)
+   :models (gptel--process-models (mapcar (lambda (model)
+                                            (let ((model-id (car model))
+                                                  (model-props (copy-sequence (cdr model))))
+                                              (push 'nosystem (plist-get model-props :capabilities))
+                                              (cons model-id model-props)))
+                                          gptel--openai-models))
    :header (lambda ()
              `(("Authorization" . ,(concat "Bearer " key))
                ("OpenAI-Beta" . "assistants=v2")))
