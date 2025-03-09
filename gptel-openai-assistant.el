@@ -170,7 +170,8 @@ CALLBACK is invoked without any args after successfully creating a thread."
    (lambda (tool-call)
      (list
       :output (plist-get tool-call :result)
-      :tool_call_id (plist-get tool-call :id)))
+      :tool_call_id (gptel--openai-format-tool-id
+                     (plist-get tool-call :id))))
    tool-use))
 
 (cl-defmethod gptel--request-data ((backend gptel-openai-assistant) prompts)
@@ -233,20 +234,18 @@ CALLBACK is invoked without any args after successfully creating a thread."
                   (cl-loop
                    for tool-call in tool-use ; Construct the call specs for running the function calls
                    for spec = (plist-get tool-call :function)
-                   collect (list :id (plist-get tool-call :id)
+                   collect (list :id (gptel--openai-unformat-tool-id (plist-get tool-call :id))
                                  :name (plist-get spec :name)
                                  :args (ignore-errors (gptel--json-read-string
                                                        (plist-get spec :arguments))))
                    into call-specs
                    finally (plist-put info :tool-use call-specs)))
-              (when-let* ((response (gptel--json-read)))
-                (when (and (null (plist-get info :openai-assistant-run-id))
-                           (string-equal (plist-get response :object) "thread.run"))
-                  (plist-put info :openai-assistant-run-id (plist-get response :id)))
-                (if-let* ((content (map-nested-elt response '(:delta :content 0 :text :value)))
+              (if-let* ((response (gptel--json-read))
+                        (delta (plist-get response :delta)))
+                (if-let* ((content (map-nested-elt delta '(:content 0 :text :value)))
                           ((not (eq content :null))))
                     (if-let* ((annotations (map-nested-elt
-                                            response '(:delta :content 0 :text :annotations)))
+                                            delta '(:content 0 :text :annotations)))
                               (_ (length> annotations 0)))
                         (cl-loop for annotation across annotations
                                  for file-id = (map-nested-elt
@@ -255,7 +254,7 @@ CALLBACK is invoked without any args after successfully creating a thread."
                                  do (push (format "[file_citation:%s]" file-id content) content-strs))
                       (push content content-strs))
                   ;; No text content, so look for tool calls
-                  (when-let* ((tool-call (map-nested-elt response '(:delta :step_details :tool_calls 0)))
+                  (when-let* ((tool-call (map-nested-elt delta '(:step_details :tool_calls 0)))
                               (func (plist-get tool-call :function)))
                     (if (plist-get func :name) ;new tool block begins
                         (progn
@@ -270,7 +269,10 @@ CALLBACK is invoked without any args after successfully creating a thread."
                           ;; NOTE: Do NOT use `push' for this, it prepends and we lose the reference
                           (plist-put info :tool-use (cons tool-call (plist-get info :tool-use))))
                       ;; old tool block continues, so continue collecting arguments in :partial_json 
-                      (push (plist-get func :arguments) (plist-get info :partial_json)))))))))
+                      (push (plist-get func :arguments) (plist-get info :partial_json)))))
+                (when (and (null (plist-get info :openai-assistant-run-id))
+                           (string-equal (plist-get response :object) "thread.run"))
+                  (plist-put info :openai-assistant-run-id (plist-get response :id)))))))
       ((json-parse-error json-end-of-file search-failed)
        (goto-char (match-beginning 0)))
       (error
@@ -403,7 +405,7 @@ CALLBACK is invoked without any args after successfully creating a thread."
   (gptel-openai-assistant-start-thread `(:buffer ,(buffer-name))))
 
 ;; ***************************************************************************************
-;; gptel FSM related functions and related setup *****************************************
+;; gptel FSM related functions ***********************************************************
 ;; ***************************************************************************************
 (defun gptel-openai-assistant--backend-is-oaia-p (info)
   "Check if backend is openai-assistant."
@@ -491,7 +493,7 @@ CALLBACK is invoked without any args after successfully creating a thread."
       (cl-call-next-method obj value))))
 
 ;; ***************************************************************************************
-;; gptel FSM related functions ***********************************************************
+;; gptel FSM related setup ***************************************************************
 ;; ***************************************************************************************
 
 ;; INIT should transition to AWAIT
