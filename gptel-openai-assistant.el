@@ -77,6 +77,48 @@ CALLBACK is called with the response from calling url-retrive."
                       ))
                   nil t t)))
 
+(defun gptel-openai-assistant-url-retrive-synchronously (method data url)
+  "Get data from URL with DATA using METHOD with openai-assistant headers."
+  (let* ((url-request-method method)
+         (url-request-extra-headers
+          (append `(("Content-Type" . "application/json")
+                    ("Authorization" . ,(concat "Bearer " (gptel--get-api-key)))
+                    ("OpenAI-Beta" . "assistants=v2"))))
+         (url-request-data data)
+         (response-buffer (url-retrieve-synchronously
+                           (cl-typecase url
+                             (string url)
+                             (function (funcall url))
+                             (t (error "Unknown value for url (%s) in step" url))))))
+    (with-current-buffer response-buffer
+      (goto-char (point-min))
+      (prog1 (gptel-openai-assistant--url-parse-response)
+        (kill-buffer response-buffer)))))
+
+(defun gptel-openai-assistant-replace-annotations-with-filename (start end)
+  "Callback to use with `gptel-post-response-functions' to replace file ids with file names."
+  (save-excursion
+    (goto-char start)
+    (condition-case err
+        (while (re-search-forward "\\[file_citation:\\([a-zA-Z0-9\\-]*\\)\\]" end)
+          (if-let* ((match0 (match-string 0))
+                    (file-id (match-string 1))
+                    (elt
+                     (pcase-let ((`(,response ,http-status ,http-msg ,error)
+                                  (save-match-data
+                                    (gptel-openai-assistant-url-retrive-synchronously
+                                     "GET" nil
+                                     (format "https://api.openai.com/v1/files/%s" file-id)))))
+                       (if error
+                           (progn (message "Failed on file %s (%s - %s)" file-id http-msg error))
+                         (plist-get response :filename))))
+                    (newtext (format " [file:%s]" elt)))
+              (progn
+                (setq end (+ end (- (length newtext) (length match0))))
+                (replace-match newtext))
+            (setq end (+ end (length match0)))))
+      (search-failed nil))))
+
 ;; copied from `gptel--url-parse-response' beacuse we don't want the following:
 ;; (gptel--parse-response backend response proc-info)
 (defun gptel-openai-assistant--url-parse-response ()
